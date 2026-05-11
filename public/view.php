@@ -27,6 +27,23 @@ if (!$doc) {
     exit;
 }
 
+if ($doc['publish_at'] !== null) {
+    $publish = new DateTime($doc['publish_at'], new DateTimeZone('UTC'));
+    $now = new DateTime('now', new DateTimeZone('UTC'));
+    if ($publish > $now) {
+        http_response_code(404);
+        render_header('Not found');
+        ?>
+        <div class="centered-message">
+            <h1>Not yet available</h1>
+            <p>This link is not yet available. Please check back later.</p>
+        </div>
+        <?php
+        render_footer();
+        exit;
+    }
+}
+
 render_header($doc['title']);
 ?>
 

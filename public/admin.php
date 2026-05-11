@@ -13,14 +13,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($title === '' || $body === '') {
         $error = 'Title and body are required.';
     } else {
-        $stmt = db()->prepare('
-            INSERT INTO documents (title, body, created_by)
-            VALUES (?, ?, ?)
-        ');
-        $stmt->execute([$title, $body, $staff['id']]);
-        $docId = (int) db()->lastInsertId();
+        $publishAt = null;
+        $publishAtRaw = trim($_POST['publish_at'] ?? '');
+        if ($publishAtRaw !== '') {
+            $dt = new DateTime($publishAtRaw); // America/Chicago from default timezone
+            $dt->setTimezone(new DateTimeZone('UTC'));
+            $publishAt = $dt->format('Y-m-d H:i:s');
+        }
 
-        audit_log('create', 'document', $docId, ['title' => $title]);
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('
+                INSERT INTO documents (title, body, created_by, publish_at)
+                VALUES (?, ?, ?, ?)
+            ');
+            $stmt->execute([$title, $body, $staff['id'], $publishAt]);
+            $docId = (int) $pdo->lastInsertId();
+
+            audit_log('create', 'document', $docId, [
+                'title'      => $title,
+                'publish_at' => $publishAt,
+            ]);
+
+            $pdo->commit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
 
         header('Location: /admin.php?created=' . $docId);
         exit;
@@ -59,6 +79,10 @@ render_header('Admin', $staff);
             <label for="body">Body</label>
             <textarea id="body" name="body" required></textarea>
         </div>
+        <div class="form-field">
+            <label for="publish_at">Publish at (optional)</label>
+            <input type="datetime-local" id="publish_at" name="publish_at">
+        </div>
         <button type="submit" class="btn">Create document</button>
     </form>
 </section>
@@ -75,16 +99,34 @@ render_header('Admin', $staff);
                     <th>Title</th>
                     <th>Creator</th>
                     <th>Created</th>
+                    <th>Publish at</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($docs as $d): ?>
+                    <?php
+                    $chicago = new DateTimeZone('America/Chicago');
+                    $utc     = new DateTimeZone('UTC');
+
+                    $createdDt = new DateTime($d['created_at'], $utc);
+                    $createdDt->setTimezone($chicago);
+                    $createdDisplay = $createdDt->format('Y-m-d H:i');
+
+                    if ($d['publish_at'] !== null) {
+                        $dt = new DateTime($d['publish_at'], $utc);
+                        $dt->setTimezone($chicago);
+                        $publishDisplay = $dt->format('Y-m-d H:i');
+                    } else {
+                        $publishDisplay = null;
+                    }
+                    ?>
                     <tr>
                         <td class="id">#<?= (int) $d['id'] ?></td>
                         <td><?= h($d['title']) ?></td>
                         <td><?= h($d['creator_name']) ?></td>
-                        <td><?= h($d['created_at']) ?></td>
+                        <td><?= h($createdDisplay) ?></td>
+                        <td><?= $publishDisplay !== null ? h($publishDisplay) : '<span class="empty">immediate</span>' ?></td>
                         <td><a href="/share.php?doc=<?= (int) $d['id'] ?>" class="btn-link">Create share →</a></td>
                     </tr>
                 <?php endforeach ?>
