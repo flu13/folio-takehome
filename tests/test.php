@@ -103,5 +103,83 @@ test('readable_id is generated on document creation', function () {
         'generated readable_id format incorrect: ' . var_export($newId, true));
 });
 
+test('fts5 search finds documents by title', function () {
+    // Create a document with specific title
+    $readableId = generate_readable_id('Banana Document');
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, readable_id) VALUES (?, ?, 1, ?)');
+    $stmt->execute(['Banana Document', 'Some content here', $readableId]);
+
+    // Search for it
+    $ftsQuery = '"' . str_replace('"', '""', 'Banana') . '"';
+    $stmt = db()->prepare('
+        SELECT d.id, d.title
+        FROM documents d
+        JOIN documents_fts ON documents_fts.rowid = d.id
+        WHERE documents_fts MATCH ?
+    ');
+    $stmt->execute([$ftsQuery]);
+    $results = $stmt->fetchAll();
+
+    assert_true(count($results) > 0, 'expected to find document with "Banana" in title');
+    $found = false;
+    foreach ($results as $row) {
+        if ($row['title'] === 'Banana Document') {
+            $found = true;
+            break;
+        }
+    }
+    assert_true($found, 'expected to find the Banana Document');
+});
+
+test('fts5 search finds documents by body', function () {
+    // Create a document with specific body content
+    $readableId = generate_readable_id('Random Title');
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, readable_id) VALUES (?, ?, 1, ?)');
+    $stmt->execute(['Random Title', 'This body contains XYZABC marker', $readableId]);
+
+    // Search for it by body content
+    $ftsQuery = '"' . str_replace('"', '""', 'XYZABC') . '"';
+    $stmt = db()->prepare('
+        SELECT d.id, d.title
+        FROM documents d
+        JOIN documents_fts ON documents_fts.rowid = d.id
+        WHERE documents_fts MATCH ?
+    ');
+    $stmt->execute([$ftsQuery]);
+    $results = $stmt->fetchAll();
+
+    assert_true(count($results) > 0, 'expected to find document with "XYZABC" in body');
+    $found = false;
+    foreach ($results as $row) {
+        if ($row['title'] === 'Random Title') {
+            $found = true;
+            break;
+        }
+    }
+    assert_true($found, 'expected to find the Random Title');
+});
+
+test('fts5 search escapes quotes safely', function () {
+    // Test that quotes in search don't break FTS5 syntax
+    $readableId = generate_readable_id('Quote Test');
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, readable_id) VALUES (?, ?, 1, ?)');
+    $stmt->execute(['Quote Test', 'Document with "quotes" in it', $readableId]);
+
+    // Search with quotes - should not cause a syntax error
+    $searchStr = 'test"quote';
+    $ftsQuery = '"' . str_replace('"', '""', $searchStr) . '"';
+    $stmt = db()->prepare('
+        SELECT d.id
+        FROM documents d
+        JOIN documents_fts ON documents_fts.rowid = d.id
+        WHERE documents_fts MATCH ?
+    ');
+    // This should not throw an exception
+    $stmt->execute([$ftsQuery]);
+    $results = $stmt->fetchAll();
+    // Results may be empty, but the query should execute without error
+    assert_true(is_array($results), 'search query should execute without syntax error');
+});
+
 echo "\n{$pass} passed, {$fail} failed.\n";
 exit($fail > 0 ? 1 : 0);
