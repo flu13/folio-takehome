@@ -54,8 +54,9 @@ test('scheduled publishing prevents access before publish time', function () {
     // Create a document with publish_at in the future
     $future = new DateTime('now +1 hour', new DateTimeZone('UTC'));
     $publishAt = $future->format('Y-m-d H:i:s');
-    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, publish_at) VALUES (?, ?, 1, ?)');
-    $stmt->execute(['Future Doc', 'Body', $publishAt]);
+    $readableId = generate_readable_id('Future Doc');
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, publish_at, readable_id) VALUES (?, ?, 1, ?, ?)');
+    $stmt->execute(['Future Doc', 'Body', $publishAt, $readableId]);
     $docId = (int) db()->lastInsertId();
 
     // Create a share
@@ -84,6 +85,22 @@ test('scheduled publishing prevents access before publish time', function () {
         }
     }
     assert_true(!$isAvailable, 'document should not be available before publish time');
+});
+
+test('readable_id is generated on document creation', function () {
+    // Check seeded document has backfilled readable_id
+    $stmt = db()->prepare('SELECT readable_id FROM documents WHERE id = 1 LIMIT 1');
+    $stmt->execute();
+    $row = $stmt->fetch();
+    assert_true($row !== false, 'seeded document not found');
+    assert_true($row['readable_id'] !== null, 'readable_id should not be null');
+    assert_true(strlen($row['readable_id']) > 0, 'readable_id should not be empty');
+
+    // Check newly created document has proper format (slug-4chars)
+    $newId = generate_readable_id('Test Document Title');
+    // Should have the slug, a hyphen, and 4 random chars at the end
+    assert_true(preg_match('/^[a-z0-9-]+-[a-z0-9]{4}$/', $newId),
+        'generated readable_id format incorrect: ' . var_export($newId, true));
 });
 
 echo "\n{$pass} passed, {$fail} failed.\n";

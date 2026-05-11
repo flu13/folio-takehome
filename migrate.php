@@ -2,7 +2,7 @@
 
 $pdo = new PDO('sqlite:' . __DIR__ . '/db.sqlite');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$pdo->exec('PRAGMA foreign_keys = ON');
+$pdo->exec('PRAGMA foreign_keys = OFF');
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS migrations (
@@ -39,3 +39,6 @@ foreach ($files as $path) {
         exit(1);
     }
 }
+
+$pdo->exec('PRAGMA foreign_keys = ON');
+

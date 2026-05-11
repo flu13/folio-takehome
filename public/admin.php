@@ -25,15 +25,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare('
-                INSERT INTO documents (title, body, created_by, publish_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO documents (title, body, created_by, publish_at, readable_id)
+                VALUES (?, ?, ?, ?, ?)
             ');
-            $stmt->execute([$title, $body, $staff['id'], $publishAt]);
+            $readableId = generate_readable_id($title);
+            try {
+                $stmt->execute([$title, $body, $staff['id'], $publishAt, $readableId]);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'documents.readable_id') !== false) {
+                    $readableId = generate_readable_id($title);
+                    $stmt->execute([$title, $body, $staff['id'], $publishAt, $readableId]);
+                } else {
+                    throw $e;
+                }
+            }
             $docId = (int) $pdo->lastInsertId();
 
             audit_log('create', 'document', $docId, [
-                'title'      => $title,
-                'publish_at' => $publishAt,
+                'title'       => $title,
+                'readable_id' => $readableId,
+                'publish_at'  => $publishAt,
             ]);
 
             $pdo->commit();
@@ -96,6 +107,7 @@ render_header('Admin', $staff);
             <thead>
                 <tr>
                     <th>ID</th>
+                    <th>Readable ID</th>
                     <th>Title</th>
                     <th>Creator</th>
                     <th>Created</th>
@@ -123,6 +135,7 @@ render_header('Admin', $staff);
                     ?>
                     <tr>
                         <td class="id">#<?= (int) $d['id'] ?></td>
+                        <td class="id"><?= h($d['readable_id']) ?></td>
                         <td><?= h($d['title']) ?></td>
                         <td><?= h($d['creator_name']) ?></td>
                         <td><?= h($createdDisplay) ?></td>

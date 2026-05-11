@@ -39,6 +39,21 @@ function audit_log(string $action, string $entity_type, int $entity_id, array $d
     ]);
 }
 
+function generate_readable_id(string $title): string {
+    $slug = strtolower($title);
+    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
+    $slug = trim($slug, '-');
+    $slug = $slug ?: 'doc';
+
+    $chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    $suffix = '';
+    for ($i = 0; $i < 4; $i++) {
+        $suffix .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+
+    return $slug . '-' . $suffix;
+}
+
 function random_token(int $bytes = 16): string {
     return bin2hex(random_bytes($bytes));
 }
